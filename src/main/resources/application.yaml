@@ -1,0 +1,19 @@
+spring:
+  datasource:
+    url: jdbc:sqlite:apipulse.db
+    driver-class-name: org.sqlite.JDBC
+  jpa:
+    database-platform: org.hibernate.community.dialect.SQLiteDialect
+    hibernate:
+      ddl-auto: update
+telegram:
+  bot:
+    token: "7968923044:AAEkQQ8xM7-psv5fvk7C6r2tCI0cBr176c4"
+    username: "ApiPulse027_bot"
+
+api-pulse:
+  server-url: http://localhost:8080
+  access-token: 79bf4a43-edcd-478f-85f5-2a2bdb7a14d0
+  telegram-token: "7968923044:AAEkQQ8xM7-psv5fvk7C6r2tCI0cBr176c4"
+  telegram-username: "ApiPulse027_bot"
+  chat-id: "-4699186307"
