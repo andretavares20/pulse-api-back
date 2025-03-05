@@ -1,11 +1,14 @@
 spring:
   datasource:
-    url: jdbc:sqlite:apipulse.db
-    driver-class-name: org.sqlite.JDBC
+    url: jdbc:postgresql://localhost:5432/pulseapi
+    driver-class-name: org.postgresql.Driver
+    username: postgres
+    password: postgres
   jpa:
-    database-platform: org.hibernate.community.dialect.SQLiteDialect
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
     hibernate:
       ddl-auto: update
+    
 telegram:
   bot:
     token: "7968923044:AAEkQQ8xM7-psv5fvk7C6r2tCI0cBr176c4"
@@ -13,7 +16,7 @@ telegram:
 
 api-pulse:
   server-url: http://localhost:8080
-  access-token: 79bf4a43-edcd-478f-85f5-2a2bdb7a14d0
+  access-token: 3ea780a4-d55c-41f8-ba2a-ed87b96650ae
   telegram-token: "7968923044:AAEkQQ8xM7-psv5fvk7C6r2tCI0cBr176c4"
   telegram-username: "ApiPulse027_bot"
   chat-id: "-4699186307"

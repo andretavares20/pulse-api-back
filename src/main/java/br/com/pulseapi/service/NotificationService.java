@@ -2,49 +2,53 @@ package br.com.pulseapi.service;
 
 import java.time.LocalDateTime;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 import br.com.pulseapi.client.TelegramClient;
 import br.com.pulseapi.domain.ApiConfig;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class NotificationService {
     private final TelegramClient telegramClient;
 
-    public void sendAlert(ApiConfig config, int status, String endpoint) {
-        String message = buildAlertMessage(config, status, endpoint);
-        sendMessage(config.getNotificationChannel(), message);
+    public void sendAlert(ApiConfig config, int status, String endpoint, long latencyMs, String responseBody) {
+        String message = buildAlertMessage(config, status, endpoint, latencyMs, responseBody);
+        sendTelegramMessage(config.getNotificationChannel(), message);
     }
 
-    private String buildAlertMessage(ApiConfig config, int status, String endpoint) {
-        String statusMessage = getStatusMessage(status);
-        return String.format("API %s (%s) falhou com status %d (%s) às %s",
-                config.getName(), endpoint, status, statusMessage, LocalDateTime.now());
+    private String buildAlertMessage(ApiConfig config, int status, String endpoint, long latencyMs, String responseBody) {
+        String statusText = getStatusText(status);
+        return String.format(
+            "API %s (%s) falhou com status %d (%s) às %s\nLatência: %dms\nDetalhes: %s",
+            config.getName(),
+            endpoint,
+            status,
+            statusText,
+            LocalDateTime.now(),
+            latencyMs,
+            responseBody != null && !responseBody.isEmpty() ? responseBody : "Nenhum detalhe disponível"
+        );
     }
 
-    private String getStatusMessage(int status) {
-        return switch (status) {
-            case 400 -> "Bad Request";
-            case 401 -> "Unauthorized";
-            case 403 -> "Forbidden";
-            case 404 -> "Not Found";
-            case 500 -> "Internal Server Error";
-            case 503 -> "Service Unavailable";
-            default -> "Unknown Error";
-        };
-    }
-
-    private void sendMessage(String chatId, String message) {
+    private void sendTelegramMessage(String chatId, String message) {
         try {
             telegramClient.sendMessage(chatId, message);
+            log.info("Notificação enviada ao Telegram: {}", message);
         } catch (Exception e) {
-            logError(e);
+            log.error("Erro ao enviar notificação ao Telegram: {}", e.getMessage());
         }
     }
 
-    private void logError(Exception e) {
-        System.err.println("Falha ao enviar alerta: " + e.getMessage());
+    private String getStatusText(int status) {
+        try {
+            return HttpStatus.valueOf(status).getReasonPhrase();
+        } catch (IllegalArgumentException e) {
+            return "Unknown Error";
+        }
     }
 }
