@@ -25,7 +25,7 @@ public class NotificationService {
         String statusText = getStatusText(status);
         return String.format(
             "API %s (%s) falhou com status %d (%s) às %s\nLatência: %dms\nDetalhes: %s",
-            config.getName(),
+            config.getApiName(),
             endpoint,
             status,
             statusText,

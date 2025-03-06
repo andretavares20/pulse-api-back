@@ -22,7 +22,8 @@ import br.com.pulseapi.service.ApiMonitorService;
 import lombok.RequiredArgsConstructor;
 
 /**
- * Configuração do agendador para monitoramento dinâmico de APIs registradas com intervalos ajustáveis.
+ * Configuração do agendador para monitoramento dinâmico de APIs registradas com
+ * intervalos ajustáveis.
  */
 @Configuration
 @EnableScheduling
@@ -30,7 +31,7 @@ import lombok.RequiredArgsConstructor;
 public class SchedulerConfig {
     private static final Logger logger = LoggerFactory.getLogger(SchedulerConfig.class);
     private static final long DEFAULT_INTERVAL_MS = 300_000L; // 5 minutos como padrão
-    private static final long CHECK_INTERVAL_MS = 60_000L;   // Verifica mudanças a cada 1 minuto
+    private static final long CHECK_INTERVAL_MS = 60_000L; // Verifica mudanças a cada 1 minuto
 
     private final ApiMonitorService monitorService;
     private final ApiConfigRepository repository;
@@ -49,7 +50,8 @@ public class SchedulerConfig {
     }
 
     /**
-     * Verifica mudanças nos intervalos de agendamento a cada 1 minuto e reagenda apenas se necessário.
+     * Verifica mudanças nos intervalos de agendamento a cada 1 minuto e reagenda
+     * apenas se necessário.
      */
     @Scheduled(fixedRate = CHECK_INTERVAL_MS)
     public void refreshScheduledTasks() {
@@ -69,11 +71,13 @@ public class SchedulerConfig {
     }
 
     /**
-     * Agenda o monitoramento de uma API apenas se o intervalo mudou, sem executar imediatamente o checkApiStatus.
+     * Agenda o monitoramento de uma API apenas se o intervalo mudou, sem executar
+     * imediatamente o checkApiStatus.
      */
     private void scheduleApiMonitoringIfChanged(ApiConfig apiConfig) {
         Long apiId = apiConfig.getId();
-        Long newInterval = apiConfig.getScheduleInterval() != null ? apiConfig.getScheduleInterval() : DEFAULT_INTERVAL_MS;
+        Long newInterval = apiConfig.getScheduleInterval() != null ? apiConfig.getScheduleInterval()
+                : DEFAULT_INTERVAL_MS;
         Long currentInterval = currentIntervals.get(apiId);
 
         // Só reagenda se o intervalo mudou ou é a primeira vez
@@ -86,24 +90,25 @@ public class SchedulerConfig {
 
             Runnable monitoringTask = () -> {
                 try {
-                    logger.debug("Executando monitoramento da API: {}", apiConfig.getUrl());
+                    logger.debug("Executando monitoramento da API: {}", apiConfig.getApiUrl());
                     monitorService.checkApiStatus(apiConfig);
                 } catch (Exception e) {
-                    logger.error("Erro ao monitorar API {}: {}", apiConfig.getUrl(), e.getMessage());
+                    logger.error("Erro ao monitorar API {}: {}", apiConfig.getApiUrl(), e.getMessage());
                 }
             };
 
-            logger.info("Agendando monitoramento para API ID {} (URL: {}) com intervalo de {}ms", apiId, apiConfig.getUrl(), newInterval);
+            logger.info("Agendando monitoramento para API ID {} (URL: {}) com intervalo de {}ms", apiId,
+                    apiConfig.getApiUrl(), newInterval);
             ScheduledFuture<?> newTask = scheduler.scheduleAtFixedRate(
-                monitoringTask,
-                newInterval, // Atraso inicial igual ao intervalo
-                newInterval,
-                TimeUnit.MILLISECONDS
-            );
+                    monitoringTask,
+                    newInterval, // Atraso inicial igual ao intervalo
+                    newInterval,
+                    TimeUnit.MILLISECONDS);
             scheduledTasks.put(apiId, newTask);
             currentIntervals.put(apiId, newInterval); // Atualiza o intervalo atual
         } else {
-            logger.debug("Nenhuma mudança no intervalo para API ID {} (URL: {}), mantendo agendamento atual de {}ms", apiId, apiConfig.getUrl(), currentInterval);
+            logger.debug("Nenhuma mudança no intervalo para API ID {} (URL: {}), mantendo agendamento atual de {}ms",
+                    apiId, apiConfig.getApiUrl(), currentInterval);
         }
     }
 }

@@ -4,13 +4,14 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 
+import org.springframework.beans.BeanUtils;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
 import br.com.pulseapi.client.HttpApiClient;
 import br.com.pulseapi.domain.ApiConfig;
-import br.com.pulseapi.exceptions.DuplicateUrlException;
+import br.com.pulseapi.exceptions.DuplicateApiUrlException;
 import br.com.pulseapi.model.ApiStatusResponse;
 import br.com.pulseapi.repository.ApiConfigRepository;
 import br.com.pulseapilib.client.model.StatusReport;
@@ -31,12 +32,12 @@ public class ApiMonitorService {
     public ResponseEntity<?> registerApi(ApiConfig config) {
         try {
             validateNewApi(config);
-            validateUrlAccessibility(config.getUrl());
+            validateUrlAccessibility(config.getApiUrl());
             validateScheduleInterval(config.getScheduleInterval());
             config.setAccessToken(generateAccessToken());
             ApiConfig savedConfig = repository.save(config);
             return ResponseEntity.status(HttpStatus.CREATED).body(savedConfig);
-        } catch (DuplicateUrlException e) {
+        } catch (DuplicateApiUrlException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(e.getMessage());
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
@@ -64,8 +65,8 @@ public class ApiMonitorService {
     }
 
     public void checkApiStatus(ApiConfig config) {
-        ApiStatusResponse statusResponse = fetchApiStatus(config.getUrl());
-        processScheduledStatus(config, statusResponse, config.getUrl());
+        ApiStatusResponse statusResponse = fetchApiStatus(config.getApiUrl());
+        processScheduledStatus(config, statusResponse, config.getApiUrl());
     }
 
     public ResponseEntity<?> validateToken(String token) {
@@ -84,8 +85,8 @@ public class ApiMonitorService {
     }
 
     private void validateNewApi(ApiConfig config) {
-        if (repository.existsByUrl(config.getUrl())) {
-            throw new DuplicateUrlException("Já existe um registro com a URL '" + config.getUrl() + "'");
+        if (repository.existsByApiUrl(config.getApiUrl())) {
+            throw new DuplicateApiUrlException("Já existe um registro com a URL '" + config.getApiUrl() + "'");
         }
     }
 
@@ -95,7 +96,7 @@ public class ApiMonitorService {
         }
         try {
             ApiStatusResponse status = httpClient.fetchApiStatus(url);
-            log.info("URL {} é acessível, status retornado: {}", url, status.getStatusCode());
+            log.info("URL {} é acessível, status retornado: {}", url, status.getHttpStatusCode());
         } catch (Exception e) {
             log.error("URL {} não é acessível: {}", url, e.getMessage());
             throw new IllegalArgumentException("A URL '" + url + "' não é acessível: " + e.getMessage());
@@ -119,16 +120,16 @@ public class ApiMonitorService {
     }
 
     private void processScheduledStatus(ApiConfig config, ApiStatusResponse statusResponse, String endpoint) {
-        if (shouldNotify(config, statusResponse.getStatusCode())) {
+        if (shouldNotify(config, statusResponse.getHttpStatusCode())) {
             notificationService.sendAlert(
                 config,
-                statusResponse.getStatusCode(),
+                statusResponse.getHttpStatusCode(),
                 endpoint,
-                statusResponse.getLatencyMs(),
+                statusResponse.getRequestLatencyMs(),
                 statusResponse.getResponseBody()
             );
         }
-        updateApiStatus(config, statusResponse.getStatusCode());
+        updateApiStatus(config, statusResponse.getHttpStatusCode());
     }
 
     private ApiStatusResponse fetchApiStatus(String url) {
@@ -145,12 +146,46 @@ public class ApiMonitorService {
     }
 
     private void updateApiStatus(ApiConfig config, int status) {
-        config.setLastStatus(status);
+        config.setLastHttpStatus(status);
         repository.save(config);
     }
 
     private ResponseEntity<String> handleInternalError(String message) {
         log.error(message);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Erro interno.");
+    }
+
+    /**
+     * Atualiza uma configuração de API existente e verifica seu status.
+     *
+     * @param config Configuração atualizada da API
+     * @return Configuração atualizada salva no banco
+     * @throws IllegalArgumentException se a URL não existir
+     * @throws SecurityException se o usuário não tiver permissão
+     */
+    public ApiConfig updateApiConfig(ApiConfig config) {
+        log.debug("Atualizando configuração da API: {}", config.getApiUrl());
+        ApiConfig existing = findExistingConfigByUrl(config.getApiUrl());
+        validateUserPermission(existing, config.getOwnerUserId());
+        copyUpdatedFields(existing, config);
+        checkApiStatus(existing);
+        ApiConfig updatedConfig = repository.save(existing);
+        log.info("Configuração da API {} atualizada com sucesso", updatedConfig.getApiUrl());
+        return updatedConfig;
+    }
+
+    private void copyUpdatedFields(ApiConfig target, ApiConfig source) {
+        BeanUtils.copyProperties(source, target, "id", "accessToken", "scheduleInterval"); // Ignora campos que não devem ser atualizados
+    }
+
+    private void validateUserPermission(ApiConfig existing, String userId) {
+        if (!existing.getOwnerUserId().equals(userId)) {
+            throw new SecurityException("Você não tem permissão para atualizar este registro.");
+        }
+    }
+
+    private ApiConfig findExistingConfigByUrl(String url) {
+        return repository.findByApiUrl(url)
+                .orElseThrow(() -> new IllegalArgumentException("URL não encontrada: " + url));
     }
 }

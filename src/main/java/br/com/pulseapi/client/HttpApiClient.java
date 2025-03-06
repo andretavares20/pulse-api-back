@@ -23,8 +23,8 @@ public class HttpApiClient {
         long startTime = System.currentTimeMillis();
         ApiStatusResponse response = executeGetRequest(url);
         long latency = System.currentTimeMillis() - startTime;
-        logger.debug("Requisição para {} retornou status {} em {}ms", url, response.getStatusCode(), latency);
-        return new ApiStatusResponse(response.getStatusCode(), latency, response.getResponseBody());
+        logger.debug("Requisição para {} retornou status {} em {}ms", url, response.getHttpStatusCode(), latency);
+        return new ApiStatusResponse(response.getHttpStatusCode(), latency, response.getResponseBody());
     }
 
     private ApiStatusResponse executeGetRequest(String url) {
