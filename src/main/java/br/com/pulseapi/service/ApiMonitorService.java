@@ -149,10 +149,10 @@ public class ApiMonitorService {
     // Métodos privados de processamento
 
     private void processStatusReport(ApiConfig apiConfig, StatusReport statusReport) {
-        if (shouldSendNotification(apiConfig, statusReport.getStatus())) {
-            notificationService.sendAlert(apiConfig, statusReport.getStatus(), statusReport.getEndpoint(), 0, null);
+        if (shouldSendNotification(apiConfig, statusReport.getStatusCode())) {
+            notificationService.sendAlert(apiConfig, statusReport.getStatusCode(), statusReport.getEndpoint(), 0, null);
         }
-        updateApiStatus(apiConfig, statusReport.getStatus());
+        updateApiStatus(apiConfig, statusReport.getStatusCode());
     }
 
     private void processScheduledStatus(ApiConfig apiConfig, ApiStatusResponse statusResponse) {
