@@ -16,7 +16,7 @@ telegram:
 
 api-pulse:
   server-url: http://localhost:8080
-  access-token: 7167ca0e-70f5-4a2e-a1e5-4cb1ccff0421
+  access-token: eef80323-7c4d-47cf-8ffa-522497b6d3f4
   telegram-token: "7968923044:AAEkQQ8xM7-psv5fvk7C6r2tCI0cBr176c4"
   telegram-username: "ApiPulse027_bot"
   chat-id: "-4699186307"

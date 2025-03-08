@@ -18,6 +18,9 @@ import br.com.pulseapilib.client.model.StatusReport;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+/**
+ * Serviço responsável por gerenciar o monitoramento e configuração de APIs externas.
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -25,17 +28,20 @@ public class ApiMonitorService {
 
     private static final List<Long> VALID_SCHEDULE_INTERVALS = Arrays.asList(60_000L, 300_000L, 600_000L); // 1min, 5min, 10min
 
-    private final HttpApiClient httpClient;
+    private final HttpApiClient httpApiClient;
     private final NotificationService notificationService;
-    private final ApiConfigRepository repository;
+    private final ApiConfigRepository apiConfigRepository;
 
-    public ResponseEntity<?> registerApi(ApiConfig config) {
+    // Métodos públicos de negócio
+
+    /**
+     * Registra uma nova configuração de API, validando e gerando um token de acesso.
+     */
+    public ResponseEntity<?> registerApi(ApiConfig apiConfig) {
         try {
-            validateNewApi(config);
-            validateUrlAccessibility(config.getApiUrl());
-            validateScheduleInterval(config.getScheduleInterval());
-            config.setAccessToken(generateAccessToken());
-            ApiConfig savedConfig = repository.save(config);
+            validateNewApiRegistration(apiConfig);
+            apiConfig.setAccessToken(generateAccessToken());
+            ApiConfig savedConfig = apiConfigRepository.save(apiConfig);
             return ResponseEntity.status(HttpStatus.CREATED).body(savedConfig);
         } catch (DuplicateApiUrlException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(e.getMessage());
@@ -46,16 +52,13 @@ public class ApiMonitorService {
         }
     }
 
-    private void validateScheduleInterval(Long scheduleInterval) {
-        if (scheduleInterval == null || !VALID_SCHEDULE_INTERVALS.contains(scheduleInterval)) {
-            throw new IllegalArgumentException("O intervalo de agendamento deve ser 60000 (1min), 300000 (5min) ou 600000 (10min)");
-        }
-    }
-
-    public ResponseEntity<?> reportStatus(StatusReport report) {
+    /**
+     * Processa um relatório de status enviado por uma API externa.
+     */
+    public ResponseEntity<?> reportStatus(StatusReport statusReport) {
         try {
-            ApiConfig config = findApiConfig(report.getAccessToken());
-            processStatusReport(config, report);
+            ApiConfig apiConfig = findApiConfigByToken(statusReport.getAccessToken());
+            processStatusReport(apiConfig, statusReport);
             return ResponseEntity.ok().build();
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(e.getMessage());
@@ -64,38 +67,66 @@ public class ApiMonitorService {
         }
     }
 
-    public void checkApiStatus(ApiConfig config) {
-        ApiStatusResponse statusResponse = fetchApiStatus(config.getApiUrl());
-        processScheduledStatus(config, statusResponse, config.getApiUrl());
+    /**
+     * Verifica o status de uma API agendada e notifica se necessário.
+     */
+    public void checkApiStatus(ApiConfig apiConfig) {
+        ApiStatusResponse statusResponse = fetchApiStatus(apiConfig.getApiUrl());
+        processScheduledStatus(apiConfig, statusResponse);
     }
 
-    public ResponseEntity<?> validateToken(String token) {
-        log.info("Validando token: {}", token);
+    /**
+     * Valida um token de acesso recebido.
+     */
+    public ResponseEntity<?> validateToken(String accessToken) {
+        log.info("Validando token: {}", accessToken);
         try {
-            boolean isValid = repository.existsByAccessToken(token);
+            boolean isValid = apiConfigRepository.existsByAccessToken(accessToken);
             if (isValid) {
                 log.info("Token válido!");
                 return ResponseEntity.ok().build();
             }
-            log.warn("Token inválido: {}", token);
+            log.warn("Token inválido: {}", accessToken);
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Token inválido");
         } catch (Exception e) {
             return handleInternalError("Erro ao validar token: " + e.getMessage());
         }
     }
 
-    private void validateNewApi(ApiConfig config) {
-        if (repository.existsByApiUrl(config.getApiUrl())) {
-            throw new DuplicateApiUrlException("Já existe um registro com a URL '" + config.getApiUrl() + "'");
+    /**
+     * Atualiza uma configuração existente de API, verificando permissões e status.
+     */
+    public ApiConfig updateApiConfig(ApiConfig updatedConfig) {
+        log.debug("Atualizando configuração da API: {}", updatedConfig.getApiUrl());
+        ApiConfig existingConfig = findConfigByUrl(updatedConfig.getApiUrl());
+        validateUserPermission(existingConfig, updatedConfig.getOwnerUserId());
+        copyUpdatedFields(existingConfig, updatedConfig);
+        checkApiStatus(existingConfig);
+        ApiConfig savedConfig = apiConfigRepository.save(existingConfig);
+        log.info("Configuração da API {} atualizada com sucesso", savedConfig.getApiUrl());
+        return savedConfig;
+    }
+
+    // Métodos privados de validação
+
+    private void validateNewApiRegistration(ApiConfig apiConfig) {
+        checkForDuplicateUrl(apiConfig.getApiUrl());
+        validateUrlAccessibility(apiConfig.getApiUrl());
+        ensureValidScheduleInterval(apiConfig.getScheduleInterval());
+    }
+
+    private void checkForDuplicateUrl(String url) {
+        if (apiConfigRepository.existsByApiUrl(url)) {
+            throw new DuplicateApiUrlException("Já existe um registro com a URL '" + url + "'");
         }
     }
 
     private void validateUrlAccessibility(String url) {
-        if (!url.startsWith("http://") && !url.startsWith("https://")) {
+        if (!isValidUrlPrefix(url)) {
             throw new IllegalArgumentException("A URL deve começar com 'http://' ou 'https://'");
         }
         try {
-            ApiStatusResponse status = httpClient.fetchApiStatus(url);
+            ApiStatusResponse status = httpApiClient.fetchApiStatus(url);
             log.info("URL {} é acessível, status retornado: {}", url, status.getHttpStatusCode());
         } catch (Exception e) {
             log.error("URL {} não é acessível: {}", url, e.getMessage());
@@ -103,89 +134,84 @@ public class ApiMonitorService {
         }
     }
 
-    private String generateAccessToken() {
-        return UUID.randomUUID().toString();
-    }
-
-    private ApiConfig findApiConfig(String accessToken) {
-        return repository.findByAccessToken(accessToken)
-                .orElseThrow(() -> new IllegalArgumentException("Access token não registrado: " + accessToken));
-    }
-
-    private void processStatusReport(ApiConfig config, StatusReport report) {
-        if (shouldNotify(config, report.getStatus())) {
-            notificationService.sendAlert(config, report.getStatus(), report.getEndpoint(), 0, null);
+    private void ensureValidScheduleInterval(Long scheduleInterval) {
+        if (scheduleInterval == null || !VALID_SCHEDULE_INTERVALS.contains(scheduleInterval)) {
+            throw new IllegalArgumentException("O intervalo de agendamento deve ser 60000 (1min), 300000 (5min) ou 600000 (10min)");
         }
-        updateApiStatus(config, report.getStatus());
     }
 
-    private void processScheduledStatus(ApiConfig config, ApiStatusResponse statusResponse, String endpoint) {
-        if (shouldNotify(config, statusResponse.getHttpStatusCode())) {
+    private void validateUserPermission(ApiConfig existingConfig, String userId) {
+        if (!existingConfig.getOwnerUserId().equals(userId)) {
+            throw new SecurityException("Você não tem permissão para atualizar este registro.");
+        }
+    }
+
+    // Métodos privados de processamento
+
+    private void processStatusReport(ApiConfig apiConfig, StatusReport statusReport) {
+        if (shouldSendNotification(apiConfig, statusReport.getStatus())) {
+            notificationService.sendAlert(apiConfig, statusReport.getStatus(), statusReport.getEndpoint(), 0, null);
+        }
+        updateApiStatus(apiConfig, statusReport.getStatus());
+    }
+
+    private void processScheduledStatus(ApiConfig apiConfig, ApiStatusResponse statusResponse) {
+        if (shouldSendNotification(apiConfig, statusResponse.getHttpStatusCode())) {
             notificationService.sendAlert(
-                config,
-                statusResponse.getHttpStatusCode(),
-                endpoint,
-                statusResponse.getRequestLatencyMs(),
-                statusResponse.getResponseBody()
+                    apiConfig,
+                    statusResponse.getHttpStatusCode(),
+                    apiConfig.getApiUrl(),
+                    statusResponse.getRequestLatencyMs(),
+                    statusResponse.getResponseBody()
             );
         }
-        updateApiStatus(config, statusResponse.getHttpStatusCode());
+        updateApiStatus(apiConfig, statusResponse.getHttpStatusCode());
     }
+
+    // Métodos privados utilitários
 
     private ApiStatusResponse fetchApiStatus(String url) {
         try {
-            return httpClient.fetchApiStatus(url);
+            return httpApiClient.fetchApiStatus(url);
         } catch (Exception e) {
             log.error("Erro ao verificar status da URL {}: {}", url, e.getMessage());
             return new ApiStatusResponse(HttpStatus.INTERNAL_SERVER_ERROR.value(), 0, "Unexpected error");
         }
     }
 
-    private boolean shouldNotify(ApiConfig config, int status) {
-        return status != 200 && status != 201;
+    private ApiConfig findApiConfigByToken(String accessToken) {
+        return apiConfigRepository.findByAccessToken(accessToken)
+                .orElseThrow(() -> new IllegalArgumentException("Access token não registrado: " + accessToken));
     }
 
-    private void updateApiStatus(ApiConfig config, int status) {
-        config.setLastHttpStatus(status);
-        repository.save(config);
+    private ApiConfig findConfigByUrl(String url) {
+        return apiConfigRepository.findByApiUrl(url)
+                .orElseThrow(() -> new IllegalArgumentException("URL não encontrada: " + url));
     }
 
-    private ResponseEntity<String> handleInternalError(String message) {
-        log.error(message);
+    private String generateAccessToken() {
+        return UUID.randomUUID().toString();
+    }
+
+    private boolean shouldSendNotification(ApiConfig apiConfig, int statusCode) {
+        return statusCode != HttpStatus.OK.value() && statusCode != HttpStatus.CREATED.value();
+    }
+
+    private void updateApiStatus(ApiConfig apiConfig, int statusCode) {
+        apiConfig.setLastHttpStatus(statusCode);
+        apiConfigRepository.save(apiConfig);
+    }
+
+    private void copyUpdatedFields(ApiConfig targetConfig, ApiConfig sourceConfig) {
+        BeanUtils.copyProperties(sourceConfig, targetConfig, "id", "accessToken", "scheduleInterval");
+    }
+
+    private ResponseEntity<String> handleInternalError(String errorMessage) {
+        log.error(errorMessage);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Erro interno.");
     }
 
-    /**
-     * Atualiza uma configuração de API existente e verifica seu status.
-     *
-     * @param config Configuração atualizada da API
-     * @return Configuração atualizada salva no banco
-     * @throws IllegalArgumentException se a URL não existir
-     * @throws SecurityException se o usuário não tiver permissão
-     */
-    public ApiConfig updateApiConfig(ApiConfig config) {
-        log.debug("Atualizando configuração da API: {}", config.getApiUrl());
-        ApiConfig existing = findExistingConfigByUrl(config.getApiUrl());
-        validateUserPermission(existing, config.getOwnerUserId());
-        copyUpdatedFields(existing, config);
-        checkApiStatus(existing);
-        ApiConfig updatedConfig = repository.save(existing);
-        log.info("Configuração da API {} atualizada com sucesso", updatedConfig.getApiUrl());
-        return updatedConfig;
-    }
-
-    private void copyUpdatedFields(ApiConfig target, ApiConfig source) {
-        BeanUtils.copyProperties(source, target, "id", "accessToken", "scheduleInterval"); // Ignora campos que não devem ser atualizados
-    }
-
-    private void validateUserPermission(ApiConfig existing, String userId) {
-        if (!existing.getOwnerUserId().equals(userId)) {
-            throw new SecurityException("Você não tem permissão para atualizar este registro.");
-        }
-    }
-
-    private ApiConfig findExistingConfigByUrl(String url) {
-        return repository.findByApiUrl(url)
-                .orElseThrow(() -> new IllegalArgumentException("URL não encontrada: " + url));
+    private boolean isValidUrlPrefix(String url) {
+        return url.startsWith("http://") || url.startsWith("https://");
     }
 }
