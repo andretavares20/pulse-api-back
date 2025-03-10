@@ -10,10 +10,10 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
 import br.com.pulseapi.client.HttpApiClient;
-import br.com.pulseapi.domain.ApiConfig;
+import br.com.pulseapi.entities.ConfiguracaoApiEntity;
 import br.com.pulseapi.exceptions.DuplicateApiUrlException;
 import br.com.pulseapi.model.ApiStatusResponse;
-import br.com.pulseapi.repository.ApiConfigRepository;
+import br.com.pulseapi.repository.ConfiguracaoApiRepository;
 import br.com.pulseapilib.client.model.StatusReport;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -30,18 +30,18 @@ public class ApiMonitorService {
 
     private final HttpApiClient httpApiClient;
     private final NotificationService notificationService;
-    private final ApiConfigRepository apiConfigRepository;
+    private final ConfiguracaoApiRepository apiConfigRepository;
 
     // Métodos públicos de negócio
 
     /**
      * Registra uma nova configuração de API, validando e gerando um token de acesso.
      */
-    public ResponseEntity<?> registerApi(ApiConfig apiConfig) {
+    public ResponseEntity<?> registerApi(ConfiguracaoApiEntity apiConfig) {
         try {
             validateNewApiRegistration(apiConfig);
             apiConfig.setAccessToken(generateAccessToken());
-            ApiConfig savedConfig = apiConfigRepository.save(apiConfig);
+            ConfiguracaoApiEntity savedConfig = apiConfigRepository.save(apiConfig);
             return ResponseEntity.status(HttpStatus.CREATED).body(savedConfig);
         } catch (DuplicateApiUrlException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(e.getMessage());
@@ -57,7 +57,7 @@ public class ApiMonitorService {
      */
     public ResponseEntity<?> reportStatus(StatusReport statusReport) {
         try {
-            ApiConfig apiConfig = findApiConfigByToken(statusReport.getAccessToken());
+            ConfiguracaoApiEntity apiConfig = findApiConfigByToken(statusReport.getAccessToken());
             processStatusReport(apiConfig, statusReport);
             return ResponseEntity.ok().build();
         } catch (IllegalArgumentException e) {
@@ -70,7 +70,7 @@ public class ApiMonitorService {
     /**
      * Verifica o status de uma API agendada e notifica se necessário.
      */
-    public void checkApiStatus(ApiConfig apiConfig) {
+    public void checkApiStatus(ConfiguracaoApiEntity apiConfig) {
         ApiStatusResponse statusResponse = fetchApiStatus(apiConfig.getApiUrl());
         processScheduledStatus(apiConfig, statusResponse);
     }
@@ -96,20 +96,20 @@ public class ApiMonitorService {
     /**
      * Atualiza uma configuração existente de API, verificando permissões e status.
      */
-    public ApiConfig updateApiConfig(ApiConfig updatedConfig) {
+    public ConfiguracaoApiEntity updateApiConfig(ConfiguracaoApiEntity updatedConfig) {
         log.debug("Atualizando configuração da API: {}", updatedConfig.getApiUrl());
-        ApiConfig existingConfig = findConfigByUrl(updatedConfig.getApiUrl());
-        validateUserPermission(existingConfig, updatedConfig.getOwnerUserId());
+        ConfiguracaoApiEntity existingConfig = findConfigByUrl(updatedConfig.getApiUrl());
+        validateUserPermission(existingConfig, updatedConfig.getUser().getId());
         copyUpdatedFields(existingConfig, updatedConfig);
         checkApiStatus(existingConfig);
-        ApiConfig savedConfig = apiConfigRepository.save(existingConfig);
+        ConfiguracaoApiEntity savedConfig = apiConfigRepository.save(existingConfig);
         log.info("Configuração da API {} atualizada com sucesso", savedConfig.getApiUrl());
         return savedConfig;
     }
 
     // Métodos privados de validação
 
-    private void validateNewApiRegistration(ApiConfig apiConfig) {
+    private void validateNewApiRegistration(ConfiguracaoApiEntity apiConfig) {
         checkForDuplicateUrl(apiConfig.getApiUrl());
         validateUrlAccessibility(apiConfig.getApiUrl());
         ensureValidScheduleInterval(apiConfig.getScheduleInterval());
@@ -140,22 +140,22 @@ public class ApiMonitorService {
         }
     }
 
-    private void validateUserPermission(ApiConfig existingConfig, String userId) {
-        if (!existingConfig.getOwnerUserId().equals(userId)) {
+    private void validateUserPermission(ConfiguracaoApiEntity existingConfig, Long userId) {
+        if (!existingConfig.getUser().getId().equals(userId)) {
             throw new SecurityException("Você não tem permissão para atualizar este registro.");
         }
     }
 
     // Métodos privados de processamento
 
-    private void processStatusReport(ApiConfig apiConfig, StatusReport statusReport) {
+    private void processStatusReport(ConfiguracaoApiEntity apiConfig, StatusReport statusReport) {
         if (shouldSendNotification(apiConfig, statusReport.getStatusCode())) {
             notificationService.sendAlert(apiConfig, statusReport.getStatusCode(), statusReport.getEndpoint(), 0, null);
         }
         updateApiStatus(apiConfig, statusReport.getStatusCode());
     }
 
-    private void processScheduledStatus(ApiConfig apiConfig, ApiStatusResponse statusResponse) {
+    private void processScheduledStatus(ConfiguracaoApiEntity apiConfig, ApiStatusResponse statusResponse) {
         if (shouldSendNotification(apiConfig, statusResponse.getHttpStatusCode())) {
             notificationService.sendAlert(
                     apiConfig,
@@ -179,12 +179,12 @@ public class ApiMonitorService {
         }
     }
 
-    private ApiConfig findApiConfigByToken(String accessToken) {
+    private ConfiguracaoApiEntity findApiConfigByToken(String accessToken) {
         return apiConfigRepository.findByAccessToken(accessToken)
                 .orElseThrow(() -> new IllegalArgumentException("Access token não registrado: " + accessToken));
     }
 
-    private ApiConfig findConfigByUrl(String url) {
+    private ConfiguracaoApiEntity findConfigByUrl(String url) {
         return apiConfigRepository.findByApiUrl(url)
                 .orElseThrow(() -> new IllegalArgumentException("URL não encontrada: " + url));
     }
@@ -193,16 +193,16 @@ public class ApiMonitorService {
         return UUID.randomUUID().toString();
     }
 
-    private boolean shouldSendNotification(ApiConfig apiConfig, int statusCode) {
+    private boolean shouldSendNotification(ConfiguracaoApiEntity apiConfig, int statusCode) {
         return statusCode != HttpStatus.OK.value() && statusCode != HttpStatus.CREATED.value();
     }
 
-    private void updateApiStatus(ApiConfig apiConfig, int statusCode) {
+    private void updateApiStatus(ConfiguracaoApiEntity apiConfig, int statusCode) {
         apiConfig.setLastHttpStatus(statusCode);
         apiConfigRepository.save(apiConfig);
     }
 
-    private void copyUpdatedFields(ApiConfig targetConfig, ApiConfig sourceConfig) {
+    private void copyUpdatedFields(ConfiguracaoApiEntity targetConfig, ConfiguracaoApiEntity sourceConfig) {
         BeanUtils.copyProperties(sourceConfig, targetConfig, "id", "accessToken", "scheduleInterval");
     }
 

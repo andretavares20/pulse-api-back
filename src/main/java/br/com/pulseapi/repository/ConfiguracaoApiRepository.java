@@ -1,17 +1,19 @@
 package br.com.pulseapi.repository;
 
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 
-import br.com.pulseapi.domain.ApiConfig;
+import br.com.pulseapi.entities.ConfiguracaoApiEntity;
+import br.com.pulseapi.entities.UserEntity;
 
 
 /**
  * Repositório para gerenciamento de configurações de APIs monitoradas.
  * Fornece métodos para consultar e verificar a existência de configurações no banco de dados.
  */
-public interface ApiConfigRepository extends JpaRepository<ApiConfig, Long> {
+public interface ConfiguracaoApiRepository extends JpaRepository<ConfiguracaoApiEntity, Long> {
 
     /**
      * Verifica se existe uma configuração com a URL da API especificada.
@@ -35,7 +37,7 @@ public interface ApiConfigRepository extends JpaRepository<ApiConfig, Long> {
      * @param apiUrl URL da API a ser buscada
      * @return Optional contendo a configuração, ou vazio se não encontrada
      */
-    Optional<ApiConfig> findByApiUrl(String apiUrl);
+    Optional<ConfiguracaoApiEntity> findByApiUrl(String apiUrl);
 
     /**
      * Busca uma configuração de API pelo token de acesso.
@@ -43,5 +45,7 @@ public interface ApiConfigRepository extends JpaRepository<ApiConfig, Long> {
      * @param accessToken Token de acesso a ser buscado
      * @return Optional contendo a configuração, ou vazio se não encontrada
      */
-    Optional<ApiConfig> findByAccessToken(String accessToken);
+    Optional<ConfiguracaoApiEntity> findByAccessToken(String accessToken);
+
+    List<ConfiguracaoApiEntity> findByUser(UserEntity user);
 }

@@ -6,7 +6,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 import br.com.pulseapi.client.TelegramClient;
-import br.com.pulseapi.domain.ApiConfig;
+import br.com.pulseapi.entities.ConfiguracaoApiEntity;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -23,12 +23,12 @@ public class NotificationService {
     /**
      * Envia um alerta sobre uma falha na API para o canal de notificação configurado.
      */
-    public void sendAlert(ApiConfig apiConfig, int statusCode, String endpoint, long latencyInMs, String responseBody) {
+    public void sendAlert(ConfiguracaoApiEntity apiConfig, int statusCode, String endpoint, long latencyInMs, String responseBody) {
         String alertMessage = buildAlertMessage(apiConfig, statusCode, endpoint, latencyInMs, responseBody);
         sendMessageToTelegram(apiConfig.getNotificationChannel(), alertMessage);
     }
 
-    private String buildAlertMessage(ApiConfig apiConfig, int statusCode, String endpoint, long latencyInMs, String responseBody) {
+    private String buildAlertMessage(ConfiguracaoApiEntity apiConfig, int statusCode, String endpoint, long latencyInMs, String responseBody) {
         String statusDescription = getHttpStatusDescription(statusCode);
         return formatAlertMessage(
                 apiConfig.getApiName(),

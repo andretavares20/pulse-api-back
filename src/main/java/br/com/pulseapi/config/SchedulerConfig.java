@@ -15,8 +15,8 @@ import org.springframework.scheduling.config.FixedRateTask;
 import org.springframework.scheduling.config.ScheduledTaskRegistrar;
 import org.springframework.scheduling.support.PeriodicTrigger;
 
-import br.com.pulseapi.domain.ApiConfig;
-import br.com.pulseapi.repository.ApiConfigRepository;
+import br.com.pulseapi.entities.ConfiguracaoApiEntity;
+import br.com.pulseapi.repository.ConfiguracaoApiRepository;
 import br.com.pulseapi.service.ApiMonitorService;
 import lombok.RequiredArgsConstructor;
 
@@ -32,7 +32,7 @@ public class SchedulerConfig implements SchedulingConfigurer {
     private static final long CHECK_INTERVAL_MS = 60_000L;   // Verifica mudanças a cada 1 minuto
 
     private final ApiMonitorService monitorService;
-    private final ApiConfigRepository repository;
+    private final ConfiguracaoApiRepository repository;
 
     private final Map<Long, Long> currentIntervals = new HashMap<>();
     private final Map<Long, ScheduledTaskRegistrar> taskRegistrars = new HashMap<>();
@@ -52,17 +52,17 @@ public class SchedulerConfig implements SchedulingConfigurer {
 
     private void refreshScheduledTasks() {
         logger.info("Verificando mudanças nos intervalos de agendamento...");
-        List<ApiConfig> apiConfigs = fetchAllApiConfigs();
+        List<ConfiguracaoApiEntity> apiConfigs = fetchAllApiConfigs();
         apiConfigs.forEach(this::scheduleApiMonitoringIfChanged);
     }
 
-    private List<ApiConfig> fetchAllApiConfigs() {
-        List<ApiConfig> apiConfigs = repository.findAll();
+    private List<ConfiguracaoApiEntity> fetchAllApiConfigs() {
+        List<ConfiguracaoApiEntity> apiConfigs = repository.findAll();
         logger.info("Encontradas {} APIs diretamente do banco via JpaRepository: {}", apiConfigs.size(), apiConfigs);
         return apiConfigs;
     }
 
-    private void scheduleApiMonitoringIfChanged(ApiConfig apiConfig) {
+    private void scheduleApiMonitoringIfChanged(ConfiguracaoApiEntity apiConfig) {
         Long apiId = apiConfig.getId();
         Long newInterval = apiConfig.getScheduleInterval() != null ? apiConfig.getScheduleInterval() : DEFAULT_INTERVAL_MS;
         Long currentInterval = currentIntervals.get(apiId);
@@ -71,7 +71,7 @@ public class SchedulerConfig implements SchedulingConfigurer {
         logger.info("Schedules ativos antes de processar API ID {} (URL: {}):", apiId, apiConfig.getApiUrl());
         for (Long scheduledApiId : taskRegistrars.keySet()) {
             Long scheduledInterval = currentIntervals.get(scheduledApiId);
-            ApiConfig config = repository.findById(scheduledApiId).orElse(null);
+            ConfiguracaoApiEntity config = repository.findById(scheduledApiId).orElse(null);
             String url = config != null ? config.getApiUrl() : "Desconhecido";
             logger.info(" - API ID: {}, URL: {}, Intervalo: {}ms", scheduledApiId, url, scheduledInterval);
         }
@@ -104,7 +104,7 @@ public class SchedulerConfig implements SchedulingConfigurer {
 
     private void monitorApi(Long apiId) {
         try {
-            ApiConfig freshConfig = repository.findById(apiId)
+            ConfiguracaoApiEntity freshConfig = repository.findById(apiId)
                     .orElseThrow(() -> new IllegalStateException("Configuração da API ID " + apiId + " não encontrada"));
             logger.info("Monitoramento disparado para API ID {} (URL: {}) com intervalo configurado de {}ms",
                     apiId, freshConfig.getApiUrl(), freshConfig.getScheduleInterval());

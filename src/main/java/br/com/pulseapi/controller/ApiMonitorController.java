@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import br.com.pulseapi.domain.ApiConfig;
+import br.com.pulseapi.entities.ConfiguracaoApiEntity;
 import br.com.pulseapi.service.ApiMonitorService;
 import br.com.pulseapilib.client.model.StatusReport;
 import lombok.RequiredArgsConstructor;
@@ -34,7 +34,7 @@ public class ApiMonitorController {
      * @return ResponseEntity com o resultado do registro
      */
     @PostMapping("/register")
-    public ResponseEntity<?> registerApi(@RequestBody ApiConfig config) {
+    public ResponseEntity<?> registerApi(@RequestBody ConfiguracaoApiEntity config) {
         logger.debug("Recebida requisição para registrar API: {}", config.getApiUrl());
         return apiMonitorService.registerApi(config);
     }
@@ -58,10 +58,10 @@ public class ApiMonitorController {
      * @return ResponseEntity com a configuração atualizada ou erro
      */
     @PutMapping("/update")
-    public ResponseEntity<?> updateApiConfig(@RequestBody ApiConfig config) {
+    public ResponseEntity<?> updateApiConfig(@RequestBody ConfiguracaoApiEntity config) {
         logger.debug("Recebida requisição para atualizar API: {}", config.getApiUrl());
         try {
-            ApiConfig updatedConfig = apiMonitorService.updateApiConfig(config);
+            ConfiguracaoApiEntity updatedConfig = apiMonitorService.updateApiConfig(config);
             return ResponseEntity.ok(updatedConfig);
         } catch (IllegalArgumentException e) {
             logger.warn("Erro de validação ao atualizar API: {}", e.getMessage());
