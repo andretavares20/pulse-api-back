@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -19,9 +20,12 @@ import org.springframework.web.bind.annotation.RestController;
 
 import br.com.pulseapi.entities.ConfiguracaoApiEntity;
 import br.com.pulseapi.entities.UserEntity;
+import br.com.pulseapi.exceptions.DuplicateApiUrlException;
 import br.com.pulseapi.model.dtos.EndpointDTO;
+import br.com.pulseapi.service.ApiMonitorService;
 import br.com.pulseapi.service.ConfiguracaoApiService;
 import br.com.pulseapi.service.UserService;
+import br.com.pulseapi.utils.ScheduleIntervalConverter;
 import io.jsonwebtoken.security.Keys;
 
 @RestController
@@ -31,14 +35,16 @@ public class ConfiguracaoApiController {
     private final ConfiguracaoApiService configuracaoApiService;
     private final UserService userService;
     private final Key secretKey;
+    private final ApiMonitorService apiMonitorService;
 
     public ConfiguracaoApiController(
             ConfiguracaoApiService configuracaoApiService,
             UserService userService,
-            @Value("${jwt.secret}") String secretKeyBase64) {
+            @Value("${jwt.secret}") String secretKeyBase64,ApiMonitorService apiMonitorService) {
         this.configuracaoApiService = configuracaoApiService;
         this.userService = userService;
         this.secretKey = Keys.hmacShaKeyFor(Base64.getDecoder().decode(secretKeyBase64));
+        this.apiMonitorService=apiMonitorService;
     }
 
     @GetMapping("/endpoints")
@@ -53,32 +59,65 @@ public class ConfiguracaoApiController {
     }
 
     @PostMapping("/endpoints")
-    public ResponseEntity<Map<String, Object>> createEndpoint(@RequestBody Map<String, String> endpointRequest) {
+    public ResponseEntity<Map<String, Object>> createEndpoint(@RequestBody EndpointDTO endpointDTO) {
         String email = (String) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         UserEntity user = userService.findByEmail(email);
         if (user == null) {
             return createErrorResponse("Usuário não encontrado.");
         }
 
-        String name = endpointRequest.get("name");
-        String url = endpointRequest.get("url");
-
-        if (name == null || url == null) {
+        // Validação dos campos obrigatórios
+        if (endpointDTO.getName() == null || endpointDTO.getUrl() == null) {
             return createErrorResponse("Campos obrigatórios: name, url.");
         }
 
-        if (!url.matches("^https?://.+")) {
+        if (!endpointDTO.getUrl().matches("^https?://.+")) {
             return createErrorResponse("URL inválida. Use um formato válido (ex.: http:// ou https://).");
         }
 
-        ConfiguracaoApiEntity config = new ConfiguracaoApiEntity();
-        config.setApiName(name);
-        config.setApiUrl(url);
-        config.setNotificationChannel("default"); // Valor padrão, pode ser ajustado
-        config.setUser(user);
-        EndpointDTO savedEndpoint = configuracaoApiService.save(config);
+        // Definir valores padrão para scheduleInterval e notificationChannel, se não fornecidos
+        String scheduleIntervalStr = endpointDTO.getScheduleInterval();
+        if (scheduleIntervalStr == null) {
+            scheduleIntervalStr = "5m";
+            endpointDTO.setScheduleInterval(scheduleIntervalStr);
+        }
 
-        return createSuccessResponse("Endpoint registrado com sucesso.", savedEndpoint);
+        String notificationChannel = endpointDTO.getNotificationChannel();
+        if (notificationChannel == null) {
+            notificationChannel = "default";
+            endpointDTO.setNotificationChannel(notificationChannel);
+        }
+
+        // Converter scheduleInterval de string para milissegundos
+        Long scheduleIntervalMs;
+        try {
+            scheduleIntervalMs = ScheduleIntervalConverter.convertToMilliseconds(scheduleIntervalStr);
+        } catch (IllegalArgumentException e) {
+            return createErrorResponse("Intervalo de agendamento inválido: " + e.getMessage());
+        }
+
+        // Criar a entidade ConfiguracaoApiEntity
+        ConfiguracaoApiEntity apiConfig = new ConfiguracaoApiEntity();
+        apiConfig.setApiName(endpointDTO.getName());
+        apiConfig.setApiUrl(endpointDTO.getUrl());
+        apiConfig.setScheduleInterval(scheduleIntervalMs);
+        apiConfig.setNotificationChannel(endpointDTO.getNotificationChannel());
+        apiConfig.setLastHttpStatus(null);
+        apiConfig.setUser(user);
+
+        // Chamar o serviço para registrar a API
+        ConfiguracaoApiEntity savedConfig;
+        try {
+            savedConfig = apiMonitorService.registerApi(apiConfig);
+            EndpointDTO savedEndpoint = configuracaoApiService.mapToEndpointDTO(savedConfig);
+            return createSuccessResponse("Endpoint registrado com sucesso.", savedEndpoint);
+        } catch (DuplicateApiUrlException e) {
+            return createErrorResponse(e.getMessage());
+        } catch (IllegalArgumentException e) {
+            return createErrorResponse(e.getMessage());
+        } catch (Exception e) {
+            return createErrorResponse("Erro interno ao registrar endpoint: " + e.getMessage());
+        }
     }
 
     @DeleteMapping("/endpoints/{id}")

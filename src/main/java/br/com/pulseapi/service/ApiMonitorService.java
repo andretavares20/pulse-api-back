@@ -37,19 +37,10 @@ public class ApiMonitorService {
     /**
      * Registra uma nova configuração de API, validando e gerando um token de acesso.
      */
-    public ResponseEntity<?> registerApi(ConfiguracaoApiEntity apiConfig) {
-        try {
-            validateNewApiRegistration(apiConfig);
-            apiConfig.setAccessToken(generateAccessToken());
-            ConfiguracaoApiEntity savedConfig = apiConfigRepository.save(apiConfig);
-            return ResponseEntity.status(HttpStatus.CREATED).body(savedConfig);
-        } catch (DuplicateApiUrlException e) {
-            return ResponseEntity.status(HttpStatus.CONFLICT).body(e.getMessage());
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
-        } catch (Exception e) {
-            return handleInternalError("Erro ao registrar API: " + e.getMessage());
-        }
+    public ConfiguracaoApiEntity registerApi(ConfiguracaoApiEntity apiConfig) {
+        validateNewApiRegistration(apiConfig);
+        apiConfig.setAccessToken(generateAccessToken());
+        return apiConfigRepository.save(apiConfig);
     }
 
     /**

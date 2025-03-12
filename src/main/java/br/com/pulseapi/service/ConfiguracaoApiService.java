@@ -9,6 +9,7 @@ import br.com.pulseapi.entities.ConfiguracaoApiEntity;
 import br.com.pulseapi.entities.UserEntity;
 import br.com.pulseapi.model.dtos.EndpointDTO;
 import br.com.pulseapi.repository.ConfiguracaoApiRepository;
+import br.com.pulseapi.utils.ScheduleIntervalConverter;
 
 @Service
 public class ConfiguracaoApiService {
@@ -33,19 +34,15 @@ public class ConfiguracaoApiService {
         configuracaoApiRepository.deleteById(id);
     }
 
-    private EndpointDTO mapToEndpointDTO(ConfiguracaoApiEntity config) {
+    public EndpointDTO mapToEndpointDTO(ConfiguracaoApiEntity config) {
         EndpointDTO dto = new EndpointDTO();
         dto.setId(config.getId());
-        dto.setUserId(config.getUser().getId());
+        dto.setUserId(config.getUser() != null ? config.getUser().getId() : null);
         dto.setName(config.getApiName());
         dto.setUrl(config.getApiUrl());
-        if (config.getLastHttpStatus() == null) {
-            dto.setStatus("Unknown");
-        } else if (config.getLastHttpStatus() >= 200 && config.getLastHttpStatus() < 300) {
-            dto.setStatus("Online");
-        } else {
-            dto.setStatus("Offline");
-        }
+        dto.setStatus(config.getLastHttpStatus() != null ? config.getLastHttpStatus() : null); // Garante que status tenha um valor
+        dto.setScheduleInterval(ScheduleIntervalConverter.convertToString(config.getScheduleInterval()));
+        dto.setNotificationChannel(config.getNotificationChannel());
         return dto;
     }
 }

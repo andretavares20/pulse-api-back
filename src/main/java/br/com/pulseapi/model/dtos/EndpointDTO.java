@@ -8,5 +8,7 @@ public class EndpointDTO {
     private Long userId;
     private String name;
     private String url;
-    private String status;
+    private Integer status;
+    private String scheduleInterval; // Alterado de Long para String, conforme o backend atual
+    private String notificationChannel;
 }

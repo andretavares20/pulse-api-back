@@ -36,7 +36,7 @@ public class ApiMonitorController {
     @PostMapping("/register")
     public ResponseEntity<?> registerApi(@RequestBody ConfiguracaoApiEntity config) {
         logger.debug("Recebida requisição para registrar API: {}", config.getApiUrl());
-        return apiMonitorService.registerApi(config);
+        return ResponseEntity.ok().body( apiMonitorService.registerApi(config));
     }
 
     /**

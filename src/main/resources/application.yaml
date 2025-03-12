@@ -20,6 +20,8 @@ api-pulse:
   telegram-token: "7968923044:AAEkQQ8xM7-psv5fvk7C6r2tCI0cBr176c4"
   telegram-username: "ApiPulse027_bot"
   chat-id: "-4699186307"
+  email: andretavares16@gmail.com
+  password: Rtm32332867.
 
 stripe:
   api:

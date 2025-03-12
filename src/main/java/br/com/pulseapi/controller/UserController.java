@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 import br.com.pulseapi.entities.UserEntity;
 import br.com.pulseapi.service.PaymentService;
 import br.com.pulseapi.service.UserService;
+import br.com.pulseapilib.client.reporter.ApiPulseReporter;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 
@@ -28,7 +29,7 @@ public class UserController {
     private final PaymentService paymentService;
     private final BCryptPasswordEncoder passwordEncoder;
     private final Key secretKey;
-
+    
     @Autowired
     public UserController(
             UserService userService,
